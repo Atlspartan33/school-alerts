@@ -83,6 +83,10 @@ def maybe_send_heartbeat(state: dict, emails_scanned: int, alerts_sent: int):
 
 def run():
     log.info("Starting school email check...")
+    log.info(f"Running in: {'GitHub Actions' if os.environ.get('GITHUB_ACTIONS') else 'local'}")
+    log.info(f"GMAIL_REFRESH_TOKEN: {'SET (' + str(len(os.environ.get('GMAIL_REFRESH_TOKEN',''))) + ' chars)' if os.environ.get('GMAIL_REFRESH_TOKEN') else 'MISSING'}")
+    log.info(f"GMAIL_CLIENT_ID: {'SET' if os.environ.get('GMAIL_CLIENT_ID') else 'MISSING'}")
+    log.info(f"TELEGRAM_BOT_TOKEN: {'SET' if os.environ.get('TELEGRAM_BOT_TOKEN') else 'MISSING'}")
 
     if not config.SCHOOL_KEYWORDS and not config.SCHOOL_DOMAINS and not config.SCHOOL_SENDERS:
         log.error("No school keywords, domains, or senders configured. Edit config.py first.")
@@ -114,7 +118,7 @@ def run():
                 log.error(f"Failed to send Telegram auth alert: {te}")
             state["last_auth_alert"] = now.isoformat()
             save_state(state)
-        return
+        sys.exit(1)
 
     emails = fetch_new_emails(service)
     new_emails = [e for e in emails if e["id"] not in processed]
