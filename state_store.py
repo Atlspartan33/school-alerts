@@ -22,8 +22,8 @@ def _use_gist() -> bool:
 def load_state() -> dict:
     """Load state from Gist (CI) or local file."""
     if _use_gist():
-        gist_id = os.environ["GIST_ID"]
-        token = os.environ["GH_TOKEN"]
+        gist_id = os.environ["GIST_ID"].strip()
+        token = os.environ["GH_TOKEN"].strip()
         try:
             resp = httpx.get(
                 f"https://api.github.com/gists/{gist_id}",
@@ -32,7 +32,10 @@ def load_state() -> dict:
             )
             resp.raise_for_status()
             content = resp.json()["files"]["state.json"]["content"]
-            return json.loads(content)
+            data = json.loads(content)
+            if "processed_ids" not in data:
+                data["processed_ids"] = []
+            return data
         except Exception as e:
             log.error(f"Failed to load state from Gist: {e}")
             return {"processed_ids": []}
@@ -52,8 +55,8 @@ def save_state(state: dict):
         state["processed_ids"] = ids[-MAX_STATE_IDS:]
 
     if _use_gist():
-        gist_id = os.environ["GIST_ID"]
-        token = os.environ["GH_TOKEN"]
+        gist_id = os.environ["GIST_ID"].strip()
+        token = os.environ["GH_TOKEN"].strip()
         try:
             resp = httpx.patch(
                 f"https://api.github.com/gists/{gist_id}",

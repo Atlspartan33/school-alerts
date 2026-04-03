@@ -38,8 +38,8 @@ def _send_one(url: str, chat_id: str, message: str, parse_mode: str = "HTML") ->
 
 def send_telegram(message: str) -> bool:
     """Send a Telegram message to all configured chat IDs. Returns True if all succeed."""
-    token = os.environ["TELEGRAM_BOT_TOKEN"]
-    chat_ids = os.environ["TELEGRAM_CHAT_IDS"].split(",")
+    token = os.environ["TELEGRAM_BOT_TOKEN"].strip()
+    chat_ids = os.environ["TELEGRAM_CHAT_IDS"].strip().split(",")
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     success = True
 
@@ -56,8 +56,8 @@ def send_telegram(message: str) -> bool:
 
 def send_telegram_plain(message: str) -> bool:
     """Send a plain-text Telegram message (no HTML). Used for system alerts."""
-    token = os.environ["TELEGRAM_BOT_TOKEN"]
-    chat_ids = os.environ["TELEGRAM_CHAT_IDS"].split(",")
+    token = os.environ["TELEGRAM_BOT_TOKEN"].strip()
+    chat_ids = os.environ["TELEGRAM_CHAT_IDS"].strip().split(",")
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     success = True
 

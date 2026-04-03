@@ -25,9 +25,9 @@ class GmailAuthError(Exception):
 
 def _get_creds_from_env():
     """Build credentials from environment variables (for CI/cloud)."""
-    refresh_token = os.environ.get("GMAIL_REFRESH_TOKEN")
-    client_id = os.environ.get("GMAIL_CLIENT_ID")
-    client_secret = os.environ.get("GMAIL_CLIENT_SECRET")
+    refresh_token = (os.environ.get("GMAIL_REFRESH_TOKEN") or "").strip()
+    client_id = (os.environ.get("GMAIL_CLIENT_ID") or "").strip()
+    client_secret = (os.environ.get("GMAIL_CLIENT_SECRET") or "").strip()
 
     if not all([refresh_token, client_id, client_secret]):
         return None
