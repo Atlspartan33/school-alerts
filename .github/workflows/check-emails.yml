@@ -19,6 +19,30 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - name: Check secrets are set
+        run: |
+          echo "GMAIL_REFRESH_TOKEN: $([ -n '${{ secrets.GMAIL_REFRESH_TOKEN }}' ] && echo 'SET' || echo 'MISSING')"
+          echo "GMAIL_CLIENT_ID: $([ -n '${{ secrets.GMAIL_CLIENT_ID }}' ] && echo 'SET' || echo 'MISSING')"
+          echo "GMAIL_CLIENT_SECRET: $([ -n '${{ secrets.GMAIL_CLIENT_SECRET }}' ] && echo 'SET' || echo 'MISSING')"
+          echo "TELEGRAM_BOT_TOKEN: $([ -n '${{ secrets.TELEGRAM_BOT_TOKEN }}' ] && echo 'SET' || echo 'MISSING')"
+          echo "GIST_ID: $([ -n '${{ secrets.GIST_ID }}' ] && echo 'SET' || echo 'MISSING')"
+          echo "GH_TOKEN: $([ -n '${{ secrets.GH_TOKEN }}' ] && echo 'SET' || echo 'MISSING')"
+          python -c "
+          import os
+          for k in ['GMAIL_REFRESH_TOKEN','GMAIL_CLIENT_ID','GMAIL_CLIENT_SECRET','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_IDS','GIST_ID','GH_TOKEN','ANTHROPIC_API_KEY']:
+              v = os.environ.get(k,'')
+              print(f'{k}: len={len(v)} repr_end={repr(v[-5:])}' if v else f'{k}: EMPTY')
+          "
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
       - run: python main.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
