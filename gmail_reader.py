@@ -25,23 +25,34 @@ class GmailAuthError(Exception):
 
 def _get_creds_from_env():
     """Build credentials from environment variables (for CI/cloud)."""
+    import logging
+    log = logging.getLogger("school-alerts")
+
     refresh_token = (os.environ.get("GMAIL_REFRESH_TOKEN") or "").strip()
     client_id = (os.environ.get("GMAIL_CLIENT_ID") or "").strip()
     client_secret = (os.environ.get("GMAIL_CLIENT_SECRET") or "").strip()
 
+    log.info(f"Env auth check: refresh_token={'SET' if refresh_token else 'MISSING'}, "
+             f"client_id={'SET' if client_id else 'MISSING'}, "
+             f"client_secret={'SET' if client_secret else 'MISSING'}")
+
     if not all([refresh_token, client_id, client_secret]):
         return None
 
-    creds = Credentials(
-        token=None,
-        refresh_token=refresh_token,
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=client_id,
-        client_secret=client_secret,
-        scopes=SCOPES,
-    )
-    creds.refresh(Request())
-    return creds
+    try:
+        creds = Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=client_id,
+            client_secret=client_secret,
+            scopes=SCOPES,
+        )
+        creds.refresh(Request())
+        return creds
+    except Exception as e:
+        log.error(f"Env-based Gmail auth failed during refresh: {e}")
+        return None
 
 
 def get_gmail_service():

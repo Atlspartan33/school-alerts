@@ -104,11 +104,14 @@ def run():
             should_alert = hours_since >= 24
 
         if should_alert:
-            send_telegram_plain(
-                "\u26a0\ufe0f School Alerts: Gmail token expired!\n\n"
-                "Run this on your PC to fix it:\n"
-                "  cd school-alerts && python main.py --reauth"
-            )
+            try:
+                send_telegram_plain(
+                    "\u26a0\ufe0f School Alerts: Gmail token expired!\n\n"
+                    "Run this on your PC to fix it:\n"
+                    "  cd school-alerts && python main.py --reauth"
+                )
+            except Exception as te:
+                log.error(f"Failed to send Telegram auth alert: {te}")
             state["last_auth_alert"] = now.isoformat()
             save_state(state)
         return
