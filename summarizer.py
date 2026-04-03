@@ -41,11 +41,11 @@ IMPORTANT means the email contains:
 - An event requiring preparation (field trip, spirit day, supplies)
 - Something directly affecting the children's day
 - Anything related to special education, IEP, disability services, or accommodations
+- A digest or summary email from the school or school district (ParentVUE, Cobb County, Garrison Mill digests) — ALWAYS mark these as IMPORTANT even if the content seems routine. The parent wants to see all school digests.
 
 SKIP means:
-- Generic newsletter with no action needed and no deadlines
 - Fundraising with no real urgency
-- Duplicate reminder with no new information
+- Duplicate reminder with no new information (same content as an email already seen today)
 - Broad community/promotional email with nothing requiring parent action
 
 Respond with ONLY valid JSON in this exact format:
