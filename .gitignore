@@ -1,0 +1,20 @@
+# Secrets — never commit these
+.env
+token.json
+credentials.json
+
+# Local state — cloud uses Gist
+state.json
+
+# Python
+__pycache__/
+*.pyc
+
+# Logs
+logs/
+
+# Virtual environment
+.venv/
+
+# Claude Code local settings
+.claude/settings.local.json
