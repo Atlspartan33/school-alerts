@@ -129,13 +129,29 @@ def _extract_body(payload: dict) -> str:
     return ""
 
 
+def _retry(fn, retries=3):
+    """Retry a Google API call on transient 500 errors."""
+    import time, logging
+    log = logging.getLogger("school-alerts")
+    for attempt in range(retries):
+        try:
+            return fn()
+        except Exception as e:
+            if "500" in str(e) or "backend" in str(e).lower():
+                log.warning(f"Gmail API transient error (attempt {attempt + 1}): {e}")
+                if attempt < retries - 1:
+                    time.sleep(3)
+                    continue
+            raise
+
+
 def fetch_new_emails(service) -> list[dict]:
     """Fetch unread emails matching school filters within the configured time window."""
     query = _build_query()
 
-    results = service.users().messages().list(
+    results = _retry(lambda: service.users().messages().list(
         userId="me", q=query, maxResults=50
-    ).execute()
+    ).execute())
 
     messages = results.get("messages", [])
     emails = []
