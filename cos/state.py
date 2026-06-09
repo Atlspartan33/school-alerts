@@ -1,4 +1,4 @@
-"""
+﻿"""
 Gist-backed state store (GitHub Actions) with local state.json fallback.
 
 Beyond processed email IDs, state carries:
@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 import config
+from cos import clean_env
 
 log = logging.getLogger("family-cos")
 
@@ -31,8 +32,8 @@ def _use_gist() -> bool:
 def load_state() -> dict:
     """Load state from Gist (CI) or local file."""
     if _use_gist():
-        gist_id = os.environ["GIST_ID"].strip()
-        token = os.environ["GH_TOKEN"].strip()
+        gist_id = clean_env("GIST_ID")
+        token = clean_env("GH_TOKEN")
         try:
             resp = httpx.get(
                 f"https://api.github.com/gists/{gist_id}",
@@ -67,8 +68,8 @@ def save_state(state: dict):
     _prune_recent_alerts(state)
 
     if _use_gist():
-        gist_id = os.environ["GIST_ID"].strip()
-        token = os.environ["GH_TOKEN"].strip()
+        gist_id = clean_env("GIST_ID")
+        token = clean_env("GH_TOKEN")
         try:
             resp = httpx.patch(
                 f"https://api.github.com/gists/{gist_id}",

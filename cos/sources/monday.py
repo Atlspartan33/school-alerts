@@ -8,9 +8,10 @@ reader hardcoded a status column ID that no longer exists on the board.)
 """
 
 import logging
-import os
 
 import httpx
+
+from cos import clean_env
 
 log = logging.getLogger("family-cos")
 
@@ -78,8 +79,8 @@ def _subitem_progress(subitems: list[dict]) -> str:
 
 def fetch_monday_items() -> list[dict]:
     """Fetch open items from the configured Monday.com boards."""
-    token = (os.environ.get("MONDAY_API_TOKEN") or "").strip()
-    board_ids_str = (os.environ.get("MONDAY_BOARD_IDS") or "").strip()
+    token = clean_env("MONDAY_API_TOKEN")
+    board_ids_str = clean_env("MONDAY_BOARD_IDS")
 
     if not token or not board_ids_str:
         raise RuntimeError("Monday.com not configured (MONDAY_API_TOKEN / MONDAY_BOARD_IDS)")

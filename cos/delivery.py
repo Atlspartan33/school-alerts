@@ -12,12 +12,12 @@ Recipients:
 """
 
 import logging
-import os
 import time
 
 import httpx
 
 import config
+from cos import clean_env
 
 log = logging.getLogger("family-cos")
 
@@ -28,19 +28,18 @@ DRY_RUN = False
 
 
 def _api_url(method: str) -> str:
-    token = os.environ["TELEGRAM_BOT_TOKEN"].strip()
-    return f"https://api.telegram.org/bot{token}/{method}"
+    return f"https://api.telegram.org/bot{clean_env('TELEGRAM_BOT_TOKEN')}/{method}"
 
 
 def broadcast_chat_ids() -> list[str]:
-    return [c.strip() for c in os.environ.get("TELEGRAM_CHAT_IDS", "").split(",") if c.strip()]
+    return [c.strip() for c in clean_env("TELEGRAM_CHAT_IDS").split(",") if c.strip()]
 
 
 def person_chat_ids() -> dict[str, str]:
     """Map of person name -> chat id, for everyone with a per-person env var set."""
     out = {}
     for name, env_var in config.PEOPLE.items():
-        chat_id = (os.environ.get(env_var) or "").strip()
+        chat_id = clean_env(env_var)
         if chat_id:
             out[name] = chat_id
     return out

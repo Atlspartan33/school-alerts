@@ -6,12 +6,12 @@ Both return a human-readable confirmation string (or raise).
 """
 
 import logging
-import os
 from datetime import datetime, timedelta
 
 import httpx
 
 import config
+from cos import clean_env
 from cos.sources.monday import MONDAY_API_URL
 
 log = logging.getLogger("family-cos")
@@ -71,7 +71,7 @@ def create_calendar_event(calendar_service, event: dict) -> str:
 # --- Monday.com ---
 
 def _monday_request(query: str, variables: dict) -> dict:
-    token = (os.environ.get("MONDAY_API_TOKEN") or "").strip()
+    token = clean_env("MONDAY_API_TOKEN")
     if not token:
         raise RuntimeError("MONDAY_API_TOKEN not configured")
     resp = httpx.post(
@@ -94,7 +94,7 @@ def create_monday_task(name: str, group_title: str | None = None,
     group_title: e.g. "Kids", "House" (defaults to config.DEFAULT_TASK_GROUP)
     due_date: "YYYY-MM-DD" or None
     """
-    board_ids_str = (os.environ.get("MONDAY_BOARD_IDS") or "").strip()
+    board_ids_str = clean_env("MONDAY_BOARD_IDS")
     if not board_ids_str:
         raise RuntimeError("MONDAY_BOARD_IDS not configured")
     board_id = board_ids_str.split(",")[0].strip()

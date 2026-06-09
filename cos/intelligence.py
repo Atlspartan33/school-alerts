@@ -7,22 +7,54 @@ Claude intelligence layer:
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
-import anthropic
+import httpx
 
 import config
+from cos import clean_env
 
 log = logging.getLogger("family-cos")
 
-_client = None
+ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
 
-def _get_client():
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic(timeout=120.0, max_retries=3)
-    return _client
+def _call_claude(model: str, max_tokens: int, system: str, user_message: str) -> str:
+    """Call the Messages API via raw httpx with retries.
+
+    Raw httpx (not the SDK) is deliberate: the SDK intermittently fails with
+    opaque connection errors on GitHub Actions runners for larger payloads;
+    this direct pattern ran the old Family Pulse reliably for months.
+    """
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": [{"role": "user", "content": user_message}],
+    }
+    headers = {
+        "x-api-key": clean_env("ANTHROPIC_API_KEY"),
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+
+    last_error = None
+    for attempt in range(3):
+        try:
+            with httpx.Client(timeout=120.0) as http:
+                resp = http.post(ANTHROPIC_API_URL, headers=headers, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+                return next(
+                    (b["text"] for b in data["content"] if b["type"] == "text"), ""
+                ).strip()
+        except Exception as e:
+            last_error = e
+            log.warning(f"Claude API attempt {attempt + 1} failed: {type(e).__name__}: {e}")
+            if attempt < 2:
+                time.sleep(5)
+    raise last_error
 
 
 # =========================================================================
@@ -90,14 +122,7 @@ Date: {email["date"]}
 
 {email["body"]}"""
 
-    response = _get_client().messages.create(
-        model=config.CLASSIFIER_MODEL,
-        max_tokens=500,
-        system=prompt,
-        messages=[{"role": "user", "content": user_message}],
-    )
-
-    text = next((b.text for b in response.content if b.type == "text"), "").strip()
+    text = _call_claude(config.CLASSIFIER_MODEL, 500, prompt, user_message)
 
     try:
         result = json.loads(text)
@@ -347,22 +372,14 @@ def generate_brief(
         "weekly_stats": weekly_stats or {},
     }, indent=2, default=str)
 
-    response = _get_client().messages.create(
-        model=config.BRIEF_MODEL,
-        max_tokens=2000,
-        system=prompt,
-        messages=[{"role": "user", "content": user_message}],
-    )
-
-    return next((b.text for b in response.content if b.type == "text"), "").strip()
+    return _call_claude(config.BRIEF_MODEL, 2000, prompt, user_message)
 
 
 # =========================================================================
 # Action parsing & ask-me-anything (inbox pipeline)
 # =========================================================================
 
-def _json_from_response(response) -> dict | None:
-    text = next((b.text for b in response.content if b.type == "text"), "").strip()
+def _json_from_text(text: str) -> dict | None:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -390,13 +407,9 @@ def parse_event_from_alert(alert: dict) -> dict | None:
         "If no concrete date can be determined at all, respond with "
         '{"error": "no date"}.'
     )
-    response = _get_client().messages.create(
-        model=config.CLASSIFIER_MODEL,
-        max_tokens=300,
-        system=prompt,
-        messages=[{"role": "user", "content": json.dumps(alert, default=str)}],
-    )
-    result = _json_from_response(response)
+    text = _call_claude(config.CLASSIFIER_MODEL, 300, prompt,
+                        json.dumps(alert, default=str))
+    result = _json_from_text(text)
     if not result or result.get("error") or not result.get("start"):
         return None
     return result
@@ -449,14 +462,8 @@ def answer_question(message_text: str, calendar_events: list[dict],
         "open_alerts": open_alerts,
     }, indent=2, default=str)
 
-    response = _get_client().messages.create(
-        model=config.BRIEF_MODEL,
-        max_tokens=1000,
-        system=prompt,
-        messages=[{"role": "user", "content": user_message}],
-    )
-
-    result = _json_from_response(response)
+    text = _call_claude(config.BRIEF_MODEL, 1000, prompt, user_message)
+    result = _json_from_text(text)
     if not result or "reply" not in result:
         return {"reply": "Sorry — I couldn't process that one. Try rephrasing.",
                 "actions": []}
