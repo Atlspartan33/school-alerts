@@ -1,12 +1,12 @@
-name: Check School Emails
+name: Telegram Inbox
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # Every 15 minutes
-  workflow_dispatch: {}       # Allow manual trigger
+    - cron: '*/5 * * * *'   # button presses & replies handled within ~5 min
+  workflow_dispatch: {}
 
 jobs:
-  check:
+  inbox:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -19,13 +19,17 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - run: python main.py
+      - run: python inbox.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+          TELEGRAM_CHAT_ID_TERRELL: ${{ secrets.TELEGRAM_CHAT_ID_TERRELL }}
+          TELEGRAM_CHAT_ID_KIM: ${{ secrets.TELEGRAM_CHAT_ID_KIM }}
           GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
           GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
           GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          MONDAY_BOARD_IDS: ${{ secrets.MONDAY_BOARD_IDS }}
           GIST_ID: ${{ secrets.GIST_ID }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}

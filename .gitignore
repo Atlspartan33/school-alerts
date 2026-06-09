@@ -18,3 +18,4 @@ logs/
 
 # Claude Code local settings
 .claude/settings.local.json
+token.json.bak
