@@ -20,6 +20,7 @@ log = logging.getLogger("family-cos")
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.events",  # write: add events from alerts/AMA
 ]
 TOKEN_PATH = "token.json"
 CREDENTIALS_PATH = "credentials.json"

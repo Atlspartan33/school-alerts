@@ -61,7 +61,39 @@ ACTION_KEYWORDS = [
     "expiring",
     "renewal",
     "registration",
+    "subscription",
+    "auto-renew",
+    "price increase",
+    "declined",
 ]
+
+# =========================================================================
+# School calendar feeds (ICS) — events that never arrive by email
+# =========================================================================
+# Add iCal/ICS URLs here (e.g. the Cobb County district calendar feed or a
+# Google Calendar "secret address in iCal format"). Empty list = source off.
+
+SCHOOL_ICS_URLS = []
+
+# =========================================================================
+# Telegram recipients
+# =========================================================================
+# TELEGRAM_CHAT_IDS (env) — broadcast list, used for alerts and system messages.
+# Optional per-person briefs: set TELEGRAM_CHAT_ID_TERRELL and/or
+# TELEGRAM_CHAT_ID_KIM (env) and each person gets a personalized daily brief.
+
+PEOPLE = {
+    "Terrell": "TELEGRAM_CHAT_ID_TERRELL",
+    "Kim": "TELEGRAM_CHAT_ID_KIM",
+}
+
+# =========================================================================
+# Actions
+# =========================================================================
+
+TIMEZONE = "America/New_York"
+DEFAULT_TASK_GROUP = "Kids"        # Monday group for tasks created from school alerts
+NUDGE_ESCALATION_THRESHOLD = 2     # briefs an item can appear in before escalation
 
 # =========================================================================
 # Models

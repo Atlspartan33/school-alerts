@@ -227,11 +227,14 @@ def _brief_mode() -> tuple[str, str]:
             "- Skip emails unless something is due Monday\n"
             "- Keep the tone relaxed"
         )),
-        "Sunday": ("WEEK PREVIEW", (
-            "Sunday evening preview of the week ahead.\n"
-            "- Show the full calendar for Mon-Fri\n"
-            "- List all tasks by priority\n"
-            "- Flag anything due early in the week\n"
+        "Sunday": ("SUNDAY RETRO + WEEK PREVIEW", (
+            "Sunday: look BACKWARD first, then preview the week.\n"
+            "RETRO section (use weekly_stats and recent_school_alerts):\n"
+            "- What got handled this week vs. what slipped (open alerts, overdue tasks)\n"
+            "- Call out recurring patterns bluntly (e.g. 'swim paperwork late twice "
+            "this month — set a standing reminder')\n"
+            "WEEK PREVIEW section:\n"
+            "- Calendar for Mon-Fri, tasks by priority, anything due early in the week\n"
             "- End with: 'Your biggest priority tomorrow is...'"
         )),
     }
@@ -249,18 +252,25 @@ This is the {mode_name} briefing.
 
 {mode_instructions}
 
-You will receive data from up to four sources:
-1. calendar_events — Google Calendar (family schedule)
+{person_instructions}You will receive data from up to five sources:
+1. calendar_events — Google Calendar (family schedule). Events with \
+"calendar": "School calendar" come from the school's published feed.
 2. monday_items — the family to-do board (group = life area: Finance, House, Kids, etc.)
 3. emails — non-school emails that may contain deadlines or payments
-4. recent_school_alerts — school alerts the family was already sent this week \
-(each may carry action items, dates, and suggested calendar entries)
+4. recent_school_alerts — school alerts the family was already sent this week. \
+Each has a status: "open" means nobody marked it handled; "done" means it was \
+cleared. Each open alert has a "nudges" count = how many briefs already \
+mentioned it.
+5. weekly_stats — counters for the Sunday retro (may be empty)
 
 BE A CHIEF OF STAFF, NOT A LIST-READER. Connect the dots across sources:
 - If a school alert mentioned an event or deadline that does NOT appear on the \
-calendar, flag it: "Not on the calendar yet — add it."
-- If a school alert had action items days ago and nothing suggests they were \
-handled, nudge: "Still open from Tuesday's alert: ..."
+calendar, flag it: "Not on the calendar yet — reply 'add <thing> to calendar'."
+- FOLLOW-THROUGH: only nudge OPEN school alerts. If an open alert has \
+nudges >= {nudge_threshold}, escalate — lead the WATCH-OUTS with it and be \
+blunt: "Third reminder: ...". Never re-mention alerts marked done.
+- MONEY: if emails show a renewal, subscription price increase, or declined \
+payment, give it one line under WATCH-OUTS. Same for overdue Finance-group tasks.
 - If a task's due date collides with a busy calendar day, say so.
 - If two things compete for the same evening, call the conflict.
 - Surface at most the 2-3 sharpest insights — quality over quantity.
@@ -297,10 +307,22 @@ def generate_brief(
     monday_items: list[dict],
     action_emails: list[dict],
     recent_alerts: list[dict],
+    weekly_stats: dict | None = None,
+    person: str | None = None,
 ) -> str:
-    """Generate the daily chief-of-staff brief."""
+    """Generate the daily chief-of-staff brief, optionally personalized."""
     now = datetime.now(timezone.utc)
     mode_name, mode_instructions = _brief_mode()
+
+    person_instructions = ""
+    if person:
+        person_instructions = (
+            f"THIS BRIEF IS FOR {person.upper()} PERSONALLY. Address them as 'you'.\n"
+            f"- Lead with {person}'s own day: events and tasks where the owner is "
+            f"{person} (or unassigned-but-clearly-theirs).\n"
+            f"- Summarize the other parent's load in ONE line so they can cover "
+            f"for each other — don't repeat their whole list.\n\n"
+        )
 
     prompt = BRIEF_PROMPT_TEMPLATE.format(
         family_context=config.FAMILY_CONTEXT,
@@ -308,6 +330,8 @@ def generate_brief(
         today_short=now.strftime("%b %d"),
         mode_name=mode_name,
         mode_instructions=mode_instructions,
+        person_instructions=person_instructions,
+        nudge_threshold=config.NUDGE_ESCALATION_THRESHOLD,
     )
 
     trimmed_emails = [
@@ -320,6 +344,7 @@ def generate_brief(
         "monday_items": monday_items[:30],
         "emails": trimmed_emails,
         "recent_school_alerts": recent_alerts,
+        "weekly_stats": weekly_stats or {},
     }, indent=2, default=str)
 
     response = _get_client().messages.create(
@@ -330,3 +355,110 @@ def generate_brief(
     )
 
     return next((b.text for b in response.content if b.type == "text"), "").strip()
+
+
+# =========================================================================
+# Action parsing & ask-me-anything (inbox pipeline)
+# =========================================================================
+
+def _json_from_response(response) -> dict | None:
+    text = next((b.text for b in response.content if b.type == "text"), "").strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}") + 1
+        if start >= 0 and end > start:
+            try:
+                return json.loads(text[start:end])
+            except json.JSONDecodeError:
+                return None
+    return None
+
+
+def parse_event_from_alert(alert: dict) -> dict | None:
+    """Turn a stored school alert into a structured calendar event."""
+    now_local = datetime.now(timezone.utc)
+    prompt = (
+        f"Today is {now_local.strftime('%A, %B %d, %Y')}. Timezone: {config.TIMEZONE}.\n"
+        "Convert this school alert into ONE calendar event. Respond with ONLY JSON:\n"
+        '{"title": "short event title (include child name)", '
+        '"start": "YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD", '
+        '"end": "same format or null", "all_day": true/false, '
+        '"location": "string or null", "notes": "string or null"}\n'
+        "If the alert mentions a date without a time, make it all-day. "
+        "If no concrete date can be determined at all, respond with "
+        '{"error": "no date"}.'
+    )
+    response = _get_client().messages.create(
+        model=config.CLASSIFIER_MODEL,
+        max_tokens=300,
+        system=prompt,
+        messages=[{"role": "user", "content": json.dumps(alert, default=str)}],
+    )
+    result = _json_from_response(response)
+    if not result or result.get("error") or not result.get("start"):
+        return None
+    return result
+
+
+AMA_PROMPT = """You are the Massey family's chief of staff, replying to a \
+Telegram message from a parent. Today is {today}. Timezone: {tz}.
+
+Family context:
+{family_context}
+
+You receive the parent's message plus JSON data: calendar_events (next 7 days),
+monday_items (open tasks), open_alerts (school alerts not yet handled).
+Replies arrive with up to ~5 minutes of delay, so never promise real-time action.
+
+You can BOTH answer and act. Respond with ONLY JSON:
+{{"reply": "plain-text Telegram reply (concise, direct, no markdown)",
+  "actions": [
+    {{"type": "create_task", "name": "...", "group": "Finance|House|Kids|Terrell To-Do", "due": "YYYY-MM-DD or null"}},
+    {{"type": "create_event", "title": "...", "start": "YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD", "end": "... or null", "all_day": true/false, "location": null, "notes": null}},
+    {{"type": "mark_done", "alert_id": "..."}}
+  ]}}
+
+Rules:
+- "actions" is usually empty — only act when the message clearly asks for it
+  ("add...", "remind me...", "put ... on the calendar", "done with ...", "we
+  handled ...").
+- "done"-style messages: find the matching open alert by meaning, return
+  mark_done with its id, and confirm what you cleared. If nothing matches, say so.
+- Questions ("what's Thursday look like?", "what's still open?"): answer from
+  the data, short and scannable. Lead with what matters.
+- If asked something the data can't answer, say what you don't have access to.
+- Never invent events, tasks, or alert ids."""
+
+
+def answer_question(message_text: str, calendar_events: list[dict],
+                    monday_items: list[dict], open_alerts: list[dict]) -> dict:
+    """Answer a free-text Telegram message. Returns {"reply": str, "actions": [...]}."""
+    now = datetime.now(timezone.utc)
+    prompt = AMA_PROMPT.format(
+        today=now.strftime("%A, %B %d, %Y"),
+        tz=config.TIMEZONE,
+        family_context=config.FAMILY_CONTEXT,
+    )
+
+    user_message = json.dumps({
+        "message": message_text,
+        "calendar_events": calendar_events,
+        "monday_items": monday_items[:30],
+        "open_alerts": open_alerts,
+    }, indent=2, default=str)
+
+    response = _get_client().messages.create(
+        model=config.BRIEF_MODEL,
+        max_tokens=1000,
+        system=prompt,
+        messages=[{"role": "user", "content": user_message}],
+    )
+
+    result = _json_from_response(response)
+    if not result or "reply" not in result:
+        return {"reply": "Sorry — I couldn't process that one. Try rephrasing.",
+                "actions": []}
+    result.setdefault("actions", [])
+    return result

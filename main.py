@@ -49,6 +49,7 @@ log = logging.getLogger("family-cos")
 
 from cos import delivery
 from cos.google_auth import GoogleAuthError, get_gmail_service, interactive_auth
+from cos.inbox import alert_buttons
 from cos.intelligence import classify_and_summarize, format_telegram_message
 from cos.runlog import record_run
 from cos.sources.gmail_school import fetch_new_emails
@@ -157,16 +158,20 @@ def run(dry_run: bool = False):
             else:
                 message = format_telegram_message(result, email.get("date", ""))
                 log.info("  -> IMPORTANT — sending Telegram alert")
-                sent = delivery.send_telegram(message)
+                alert_id = remember_alert(state, result, email["id"])
+                has_cal = bool(result.get("summary", {}).get("calendar"))
+                sent = delivery.send_telegram(message, buttons=alert_buttons(alert_id, has_cal))
                 if sent:
                     alerts_sent += 1
                     if clean_subj:
                         alerted_subjects.append(clean_subj)
                     processed.add(email["id"])
-                    remember_alert(state, result)
                     log.info("  -> Alert sent successfully")
                 else:
                     log.error("  -> Telegram send FAILED — will retry next run")
+                    state["recent_alerts"] = [
+                        a for a in state.get("recent_alerts", []) if a.get("id") != alert_id
+                    ]
 
         except Exception as e:
             log.error(f"  -> Error processing '{email['subject']}': {e} — will retry next run")

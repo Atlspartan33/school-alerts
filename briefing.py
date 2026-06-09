@@ -42,18 +42,22 @@ else:
     )
 log = logging.getLogger("family-cos")
 
+from datetime import datetime, timezone
+
 from cos import delivery
 from cos.google_auth import GoogleAuthError, get_gmail_service, get_calendar_service
 from cos.intelligence import generate_brief
 from cos.runlog import record_run
 from cos.sources.gcal import fetch_upcoming_events
 from cos.sources.gmail_actions import fetch_action_emails
+from cos.sources.ics import fetch_school_events
 from cos.sources.monday import fetch_monday_items
-from cos.state import load_state, get_recent_alerts
+from cos.state import load_state, save_state, get_recent_alerts, record_nudges, pop_weekly_stats
 
 
 SOURCE_LABELS = {
     "calendar": "Calendar",
+    "school_calendar": "School calendar",
     "monday": "Tasks",
     "email": "Email",
     "alerts_memory": "School memory",
@@ -120,14 +124,32 @@ def run(dry_run: bool = False):
         statuses["email"] = f"failed: {e}"
         log.error(f"Gmail scan failed: {e}")
 
+    if config.SCHOOL_ICS_URLS:
+        try:
+            school_events = fetch_school_events()
+            calendar_events = sorted(
+                calendar_events + school_events, key=lambda e: e["start"])
+            statuses["school_calendar"] = "ok"
+            log.info(f"School calendar (ICS): {len(school_events)} events")
+        except Exception as e:
+            statuses["school_calendar"] = f"failed: {e}"
+            log.error(f"School ICS failed: {e}")
+
+    state = None
     recent_alerts = []
     try:
-        recent_alerts = get_recent_alerts(load_state())
+        state = load_state()
+        recent_alerts = get_recent_alerts(state)
         statuses["alerts_memory"] = "ok"
         log.info(f"School alert memory: {len(recent_alerts)} recent alert(s)")
     except Exception as e:
         statuses["alerts_memory"] = f"failed: {e}"
         log.error(f"State load failed: {e}")
+
+    # Sunday retro reads (and resets) the weekly counters
+    weekly_stats = {}
+    if state is not None and datetime.now(timezone.utc).strftime("%A") == "Sunday":
+        weekly_stats = pop_weekly_stats(state)
 
     if not any(v == "ok" for v in statuses.values()):
         log.error("Every source failed — not generating a brief.")
@@ -147,21 +169,40 @@ def run(dry_run: bool = False):
         record_run("brief", statuses, sent=True, empty=True)
         return
 
-    # --- Generate brief ---
+    # --- Generate + send (per-person if configured, otherwise broadcast) ---
+    people = delivery.person_chat_ids()
+    footer = _health_footer(statuses)
+    sent = True
+
     try:
-        brief = generate_brief(calendar_events, monday_items, action_emails, recent_alerts)
-        log.info(f"Brief generated ({len(brief)} chars)")
+        if people:
+            for person, chat_id in people.items():
+                brief = generate_brief(calendar_events, monday_items, action_emails,
+                                       recent_alerts, weekly_stats, person=person)
+                log.info(f"Brief for {person} generated ({len(brief)} chars)")
+                if not delivery.send_to_chat(chat_id, brief + footer):
+                    sent = False
+        else:
+            brief = generate_brief(calendar_events, monday_items, action_emails,
+                                   recent_alerts, weekly_stats)
+            log.info(f"Brief generated ({len(brief)} chars)")
+            sent = delivery.send_telegram_plain(brief + footer)
     except Exception as e:
         log.error(f"Claude API failed: {e}")
         delivery.send_telegram_plain(f"⚠️ Family Brief: generation failed\n{e}")
         record_run("brief", statuses, sent=False, error=str(e))
         sys.exit(1)
 
-    # --- Send ---
-    sent = delivery.send_telegram_plain(brief + _health_footer(statuses))
+    # Follow-through: count this brief as a nudge for every open alert it saw
+    if state is not None and not dry_run:
+        record_nudges(state, [a["id"] for a in recent_alerts
+                              if a.get("status") == "open" and a.get("id")])
+        save_state(state)
+
     record_run("brief", statuses, sent=sent,
                counts={"calendar": len(calendar_events), "monday": len(monday_items),
-                       "emails": len(action_emails), "school_alerts": len(recent_alerts)})
+                       "emails": len(action_emails), "school_alerts": len(recent_alerts)},
+               per_person=bool(people))
 
     if sent:
         log.info("Family Brief sent")
