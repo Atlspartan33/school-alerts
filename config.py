@@ -1,12 +1,31 @@
 """
-Configuration for the school email alert system.
-Edit these values to match your family's setup.
+Family Chief of Staff — configuration.
+One place for everything about the Massey family the system needs to know.
 """
 
-# --- School Email Filters ---
-# Keywords: matches anywhere in sender name, subject, or body.
-# This is the easiest way to catch all emails from a school
-# even when they come from different sender addresses.
+# =========================================================================
+# Children & schools
+# =========================================================================
+
+CHILD_NAMES = ["Tori", "TJ"]
+
+FAMILY_CONTEXT = """
+- Terrell (dad): manages family logistics. Primary recipient of alerts and briefs.
+- Kimberly / Kim (mom): shares parenting duties. Will also receive briefs.
+- Tori (daughter): 1st grade at Garrison Mill Elementary. Teacher: Sharon Hanna.
+- TJ / Terrell (son): Garrison Mill ~2 days/week, East Cobb Prep (run by Cadence
+  Education) the rest of the week. TJ has special education needs and an IEP.
+- Garrison Mill emails could be about either child. Use clues like grade,
+  teacher, or class to figure out which. If unclear, label it General.
+- Anything about special education, IEP, disability services, accommodations,
+  or therapy is about TJ.
+"""
+
+# =========================================================================
+# School email filters (real-time alerts pipeline)
+# =========================================================================
+
+# Keywords: match anywhere in sender name, subject, or body.
 SCHOOL_KEYWORDS = [
     "Garrison Mill",
     "CTLS",
@@ -16,36 +35,62 @@ SCHOOL_KEYWORDS = [
     "Kathleen O'Brien",
 ]
 
-# Optional: exact sender domains
+# Sender domains that are almost always school-related.
 SCHOOL_DOMAINS = [
     "cobbk12.org",
     "cadenceeducation.ccsend.com",
 ]
 
-# Optional: exact sender addresses
+# Exact sender addresses (optional).
 SCHOOL_SENDERS = []
 
-# --- Children ---
-# Used by the summarizer to identify which child an email is about.
-CHILD_NAMES = [
-    "Tori",
-    "TJ",
+# =========================================================================
+# Action-email scan (briefing pipeline) — non-school emails with deadlines
+# =========================================================================
+
+ACTION_KEYWORDS = [
+    "deadline",
+    "due",
+    "action required",
+    "RSVP",
+    "confirm",
+    "payment",
+    "invoice",
+    "appointment",
+    "reminder",
+    "expiring",
+    "renewal",
+    "registration",
 ]
 
-# Extra context so the summarizer can connect emails to the right child.
-FAMILY_CONTEXT = """
-- Tori (daughter): 1st grade at Garrison Mill. Teacher is Sharon Hanna.
-- TJ / Terrell (son): goes to Garrison Mill 2 days/week and East Cobb Prep (run by Cadence) the rest of the week. TJ has special education needs and an IEP.
-- Garrison Mill emails could be about either child. Use clues like grade, teacher, or class to figure out which.
-- Any email related to special education, IEP, disability services, or special needs should be tagged as TJ.
-"""
+# =========================================================================
+# Models
+# =========================================================================
 
-# --- Processing ---
-# Only process emails received within this many hours.
-MAX_EMAIL_AGE_HOURS = 24
+# Per-email classifier: high volume, runs every 15 minutes.
+CLASSIFIER_MODEL = "claude-sonnet-4-6"
 
-# Max processed IDs to keep in state.json (prevents unbounded growth).
-MAX_STATE_IDS = 500
+# Daily brief synthesis: once a day, quality matters most.
+BRIEF_MODEL = "claude-opus-4-8"
 
-# --- Logging ---
-LOG_FILE = "logs/alerts.log"
+# =========================================================================
+# Processing
+# =========================================================================
+
+MAX_EMAIL_AGE_HOURS = 24      # alerts: only look at emails this fresh
+EMAIL_LOOKBACK_DAYS = 7       # brief: action-email scan window
+MAX_EMAILS_TO_SCAN = 30       # brief: cap on action-email candidates
+CALENDAR_DAYS_AHEAD = 7       # brief: how far ahead to look
+MAX_STATE_IDS = 500           # cap processed email IDs in state
+RECENT_ALERT_DAYS = 7         # how long alert summaries stay in brief memory
+
+# =========================================================================
+# Logging
+# =========================================================================
+
+ALERTS_LOG_FILE = "logs/alerts.log"
+BRIEF_LOG_FILE = "logs/brief.log"
+RUN_LOG_FILE = "logs/runs.jsonl"
+
+# Back-compat alias (old code imported LOG_FILE)
+LOG_FILE = ALERTS_LOG_FILE

@@ -1,14 +1,15 @@
-name: Check School Emails
+name: Daily Family Brief
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # Every 15 minutes
-  workflow_dispatch: {}       # Allow manual trigger
+    # 7:00 AM ET during DST (11:00 UTC); 6:00 AM ET in winter
+    - cron: '0 11 * * *'
+  workflow_dispatch: {}
 
 jobs:
-  check:
+  brief:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -19,7 +20,7 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - run: python main.py
+      - run: python briefing.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -27,5 +28,7 @@ jobs:
           GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
           GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
           GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          MONDAY_BOARD_IDS: ${{ secrets.MONDAY_BOARD_IDS }}
           GIST_ID: ${{ secrets.GIST_ID }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
