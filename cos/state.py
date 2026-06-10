@@ -1,4 +1,4 @@
-﻿"""
+"""
 Gist-backed state store (GitHub Actions) with local state.json fallback.
 
 Beyond processed email IDs, state carries:
