@@ -2,8 +2,10 @@ name: Daily Family Brief
 
 on:
   schedule:
-    # 7:00 AM ET during DST (11:00 UTC); 6:00 AM ET in winter
+    # Morning brief: 7:00 AM ET during DST (11:00 UTC); 6:00 AM ET in winter
     - cron: '0 11 * * *'
+    # Tomorrow-prep brief: 8:00 PM ET during DST (00:00 UTC); 7:00 PM ET in winter
+    - cron: '0 0 * * *'
   workflow_dispatch: {}
 
 jobs:

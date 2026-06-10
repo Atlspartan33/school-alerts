@@ -1,4 +1,4 @@
-﻿"""
+"""
 Gist-backed state store (GitHub Actions) with local state.json fallback.
 
 Beyond processed email IDs, state carries:
@@ -172,3 +172,99 @@ def get_telegram_offset(state: dict) -> int | None:
 
 def set_telegram_offset(state: dict, offset: int):
     state["telegram_offset"] = offset
+
+
+# --- Proposals (preview + approve before any write) ---
+
+def _short_id(payload) -> str:
+    return hashlib.sha1(
+        (json.dumps(payload, sort_keys=True, default=str)
+         + datetime.now(timezone.utc).isoformat()).encode()
+    ).hexdigest()[:8]
+
+
+def add_proposal(state: dict, ptype: str, payload: dict, chat_id: str) -> str:
+    """Store a pending action awaiting Approve/Cancel. Returns its id."""
+    pid = _short_id(payload)
+    state.setdefault("proposals", []).append({
+        "id": pid,
+        "type": ptype,           # create_event | create_task | create_reminder
+        "payload": payload,
+        "chat_id": chat_id,
+        "status": "pending",
+        "created": datetime.now(timezone.utc).isoformat(),
+    })
+    return pid
+
+
+def get_proposal(state: dict, pid: str) -> dict | None:
+    for p in state.get("proposals", []):
+        if p.get("id") == pid:
+            return p
+    return None
+
+
+def resolve_proposal(state: dict, pid: str, status: str):
+    p = get_proposal(state, pid)
+    if p is not None:
+        p["status"] = status  # executed | cancelled
+
+
+def prune_proposals(state: dict, max_age_hours: int = 48):
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    state["proposals"] = [
+        p for p in state.get("proposals", [])
+        if datetime.fromisoformat(p["created"]) >= cutoff
+    ]
+
+
+# --- Reminders (one-shot, fired by the inbox runs) ---
+
+def add_reminder(state: dict, text: str, when_iso: str, chat_id: str) -> str:
+    rid = _short_id({"text": text, "when": when_iso})
+    state.setdefault("reminders", []).append({
+        "id": rid, "text": text, "when": when_iso, "chat_id": chat_id,
+        "created": datetime.now(timezone.utc).isoformat(),
+    })
+    return rid
+
+
+def pop_due_reminders(state: dict, now_utc: datetime) -> list[dict]:
+    """Remove and return reminders whose time has arrived."""
+    due, remaining = [], []
+    for r in state.get("reminders", []):
+        try:
+            when = datetime.fromisoformat(r["when"])
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            (due if when <= now_utc else remaining).append(r)
+        except ValueError:
+            continue  # drop malformed reminders
+    state["reminders"] = remaining
+    return due
+
+
+def get_reminders(state: dict) -> list[dict]:
+    return state.get("reminders", [])
+
+
+# --- Family memory (teachable facts, used by AMA and briefs) ---
+
+def add_memory(state: dict, text: str) -> str:
+    mid = _short_id({"text": text})
+    state.setdefault("family_memory", []).append({
+        "id": mid, "text": text,
+        "added": datetime.now(timezone.utc).isoformat(),
+    })
+    return mid
+
+
+def forget_memory(state: dict, memory_id: str) -> bool:
+    memories = state.get("family_memory", [])
+    kept = [m for m in memories if m.get("id") != memory_id]
+    state["family_memory"] = kept
+    return len(kept) < len(memories)
+
+
+def get_memories(state: dict) -> list[dict]:
+    return state.get("family_memory", [])
