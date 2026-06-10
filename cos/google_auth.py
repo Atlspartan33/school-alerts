@@ -36,9 +36,10 @@ GmailAuthError = GoogleAuthError
 
 def _get_creds_from_env():
     """Build credentials from environment variables (CI/cloud)."""
-    refresh_token = (os.environ.get("GMAIL_REFRESH_TOKEN") or "").strip()
-    client_id = (os.environ.get("GMAIL_CLIENT_ID") or "").strip()
-    client_secret = (os.environ.get("GMAIL_CLIENT_SECRET") or "").strip()
+    from cos import clean_env
+    refresh_token = clean_env("GMAIL_REFRESH_TOKEN")
+    client_id = clean_env("GMAIL_CLIENT_ID")
+    client_secret = clean_env("GMAIL_CLIENT_SECRET")
 
     if not all([refresh_token, client_id, client_secret]):
         return None
