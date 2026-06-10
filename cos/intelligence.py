@@ -530,7 +530,8 @@ You can BOTH answer and act. Respond with ONLY JSON:
     {{"type": "create_reminder", "text": "what to remind", "when": "YYYY-MM-DDTHH:MM:SS (local {tz} time)"}},
     {{"type": "mark_done", "alert_id": "..."}},
     {{"type": "remember", "text": "the fact to store, rewritten as a clear standalone sentence"}},
-    {{"type": "forget", "memory_id": "..."}}
+    {{"type": "forget", "memory_id": "..."}},
+    {{"type": "expect_guest", "name": "FirstName"}}
   ]}}
 
 Rules:
@@ -544,6 +545,9 @@ Rules:
 - mark_done / remember / forget DO execute immediately — confirm those plainly.
 - "done"-style messages: find the matching open alert by meaning, return
   mark_done with its id, and confirm what you cleared. If nothing matches, say so.
+- "onboard X" / "add X to the bot" / "invite X": return expect_guest with their
+  name. Confirm: the next NEW person to message the bot within 48 hours will be
+  welcomed as X — so they should send X the bot link now.
 - Reminder times: "tomorrow night" → 20:00 tomorrow; "in the morning" → 07:30;
   vague day with no time → 09:00.
 - Questions ("what's Thursday look like?", "what's still open?"): answer from

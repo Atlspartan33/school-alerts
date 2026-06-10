@@ -53,7 +53,7 @@ from cos.sources.gmail_actions import fetch_action_emails
 from cos.sources.ics import fetch_school_events
 from cos.sources.monday import fetch_monday_items
 from cos.state import (load_state, save_state, get_recent_alerts, record_nudges,
-                       pop_weekly_stats, get_memories, get_reminders)
+                       pop_weekly_stats, get_memories, get_reminders, person_wants)
 
 
 SOURCE_LABELS = {
@@ -187,7 +187,11 @@ def run(dry_run: bool = False, mode: str | None = None):
         return
 
     # --- Generate + send (per-person if configured, otherwise broadcast) ---
-    people = delivery.person_chat_ids()
+    people = delivery.person_chat_ids(state)
+    setting_key = "evening_brief" if mode == "evening" else "morning_brief"
+    if state is not None:
+        people = {name: cid for name, cid in people.items()
+                  if person_wants(state, name, setting_key)}
     footer = _health_footer(statuses)
     sent = True
 
@@ -229,6 +233,14 @@ def run(dry_run: bool = False, mode: str | None = None):
         record_nudges(state, [a["id"] for a in recent_alerts
                               if a.get("status") == "open" and a.get("id")])
         save_state(state)
+
+    # Sunday Setup: symmetric week-planning ask to every onboarded person
+    if mode == "evening" and now_local().strftime("%A") == "Sunday":
+        ask = ("🗓 Planning the family's week — any evenings out, appointments, "
+               "or commitments this week I should put on the calendar? Just "
+               "reply here and I'll set them up for approval.")
+        for person, chat_id in delivery.person_chat_ids(state).items():
+            delivery.send_to_chat(chat_id, ask)
 
     record_run("brief", statuses, sent=sent,
                counts={"calendar": len(calendar_events), "monday": len(monday_items),

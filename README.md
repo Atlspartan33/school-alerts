@@ -83,10 +83,12 @@ pull events that never arrive by email into the brief.
 
 ## Adding the second parent
 
-1. They open the Telegram bot and send it any message.
-2. Get their chat ID: `https://api.telegram.org/bot<TOKEN>/getUpdates`
-3. Set their per-person chat-id secret (see `people` in the family config) and/or append to
-   `TELEGRAM_CHAT_IDS` (alerts) in the repo secrets.
+1. Text the bot: `onboard <name>`
+2. Send them the bot link. The next new person to message it within 48 hours
+   is welcomed by name with a live look-ahead and starter examples — no
+   secrets or setup needed. They start light (morning brief + school alerts;
+   no evening brief) — per-person settings live in state under
+   `people_settings`.
 
 ## Models
 

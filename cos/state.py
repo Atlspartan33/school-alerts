@@ -218,6 +218,52 @@ def prune_proposals(state: dict, max_age_hours: int = 48):
     ]
 
 
+# --- People: onboarded chats and per-person delivery settings ---
+# Env-configured people (config.PEOPLE -> env vars) get everything by default.
+# State-onboarded guests start light: morning brief + alerts, no evening brief.
+
+GUEST_DEFAULT_SETTINGS = {"alerts": True, "morning_brief": True, "evening_brief": False}
+
+
+def expect_guest(state: dict, name: str):
+    """Arm onboarding: the next unknown chat to message the bot is this person."""
+    state["expected_guest"] = {
+        "name": name,
+        "armed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def pop_expected_guest(state: dict) -> str | None:
+    """Return the expected guest's name if armed within 48h, else None."""
+    guest = state.get("expected_guest")
+    if not guest:
+        return None
+    armed = datetime.fromisoformat(guest["armed_at"])
+    state.pop("expected_guest", None)
+    if datetime.now(timezone.utc) - armed > timedelta(hours=48):
+        return None
+    return guest["name"]
+
+
+def add_person_chat(state: dict, name: str, chat_id: str):
+    state.setdefault("people_chats", {})[name] = chat_id
+    state.setdefault("people_settings", {}).setdefault(name, dict(GUEST_DEFAULT_SETTINGS))
+
+
+def get_people_chats(state: dict) -> dict:
+    """name -> chat_id for everyone onboarded via chat (not env)."""
+    return state.get("people_chats", {})
+
+
+def person_wants(state: dict, name: str, key: str) -> bool:
+    """Delivery preference; env-configured people default to everything on."""
+    return bool(state.get("people_settings", {}).get(name, {}).get(key, True))
+
+
+def set_person_setting(state: dict, name: str, key: str, value: bool):
+    state.setdefault("people_settings", {}).setdefault(name, {})[key] = value
+
+
 # --- Pending edits (Edit button pressed; next message is the instruction) ---
 
 def set_pending_edit(state: dict, chat_id: str, proposal_id: str):

@@ -35,19 +35,22 @@ def broadcast_chat_ids() -> list[str]:
     return [c.strip() for c in clean_env("TELEGRAM_CHAT_IDS").split(",") if c.strip()]
 
 
-def person_chat_ids() -> dict[str, str]:
-    """Map of person name -> chat id, for everyone with a per-person env var set."""
+def person_chat_ids(state: dict | None = None) -> dict[str, str]:
+    """Map of person name -> chat id: env-configured people plus chat-onboarded ones."""
     out = {}
     for name, env_var in config.PEOPLE.items():
         chat_id = clean_env(env_var)
         if chat_id:
             out[name] = chat_id
+    if state:
+        for name, chat_id in state.get("people_chats", {}).items():
+            out.setdefault(name, str(chat_id))
     return out
 
 
-def known_chat_ids() -> set[str]:
+def known_chat_ids(state: dict | None = None) -> set[str]:
     """Every chat id we're allowed to talk to (inbox uses this as an allowlist)."""
-    return set(broadcast_chat_ids()) | set(person_chat_ids().values())
+    return set(broadcast_chat_ids()) | set(person_chat_ids(state).values())
 
 
 def _print_dry_run(message: str, extra: str = ""):
@@ -124,22 +127,30 @@ def send_to_chat(chat_id: str, message: str, parse_mode: str = "",
 
 
 def _send_broadcast(message: str, parse_mode: str,
-                    buttons: list[list[dict]] | None = None) -> bool:
+                    buttons: list[list[dict]] | None = None,
+                    extra_chat_ids: list[str] | None = None) -> bool:
     if DRY_RUN:
         extra = f"with buttons {[[b['text'] for b in row] for row in buttons]} " if buttons else ""
         _print_dry_run(message, extra)
         return True
 
+    recipients = list(broadcast_chat_ids())
+    for cid in extra_chat_ids or []:
+        if cid and cid not in recipients:
+            recipients.append(cid)
+
     success = True
-    for chat_id in broadcast_chat_ids():
+    for chat_id in recipients:
         if not send_to_chat(chat_id, message, parse_mode, buttons):
             success = False
     return success
 
 
-def send_telegram(message: str, buttons: list[list[dict]] | None = None) -> bool:
+def send_telegram(message: str, buttons: list[list[dict]] | None = None,
+                  extra_chat_ids: list[str] | None = None) -> bool:
     """Send an HTML-formatted message (optionally with inline buttons) to the broadcast list."""
-    return _send_broadcast(message, parse_mode="HTML", buttons=buttons)
+    return _send_broadcast(message, parse_mode="HTML", buttons=buttons,
+                           extra_chat_ids=extra_chat_ids)
 
 
 def send_telegram_plain(message: str) -> bool:
