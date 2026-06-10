@@ -1,48 +1,48 @@
 """
 Family Chief of Staff — configuration.
-One place for everything about the Massey family the system needs to know.
+
+Anything that identifies the family (names, schools, teachers, filters)
+lives OUTSIDE this public file: in the FAMILY_CONFIG env var (a JSON repo
+secret in CI) or a gitignored local family_config.json. This file holds
+only generic knobs and the loader.
 """
 
-# =========================================================================
-# Children & schools
-# =========================================================================
-
-CHILD_NAMES = ["Tori", "TJ"]
-
-FAMILY_CONTEXT = """
-- Terrell (dad): manages family logistics. Primary recipient of alerts and briefs.
-- Kimberly / Kim (mom): shares parenting duties. Will also receive briefs.
-- Tori (daughter): 1st grade at Garrison Mill Elementary. Teacher: Sharon Hanna.
-- TJ / Terrell (son): Garrison Mill ~2 days/week, East Cobb Prep (run by Cadence
-  Education) the rest of the week. TJ has special education needs and an IEP.
-- Garrison Mill emails could be about either child. Use clues like grade,
-  teacher, or class to figure out which. If unclear, label it General.
-- Anything about special education, IEP, disability services, accommodations,
-  or therapy is about TJ.
-"""
+import json
+import os
+from pathlib import Path
 
 # =========================================================================
-# School email filters (real-time alerts pipeline)
+# Family config loader (private details live in env/secret, not in git)
 # =========================================================================
 
-# Keywords: match anywhere in sender name, subject, or body.
-SCHOOL_KEYWORDS = [
-    "Garrison Mill",
-    "CTLS",
-    "CTLSParent",
-    "parentvue",
-    "eastcobbprep",
-    "Kathleen O'Brien",
-]
+def _load_family_config() -> dict:
+    raw = (os.environ.get("FAMILY_CONFIG") or "").strip().strip("﻿")
+    if not raw:
+        local = Path(__file__).parent / "family_config.json"
+        if local.exists():
+            raw = local.read_text(encoding="utf-8-sig")
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"WARNING: FAMILY_CONFIG is not valid JSON ({e}); running without family details")
+        return {}
 
-# Sender domains that are almost always school-related.
-SCHOOL_DOMAINS = [
-    "cobbk12.org",
-    "cadenceeducation.ccsend.com",
-]
 
-# Exact sender addresses (optional).
-SCHOOL_SENDERS = []
+_fam = _load_family_config()
+
+# =========================================================================
+# Children & schools (from family config)
+# =========================================================================
+
+CHILD_NAMES = _fam.get("child_names", [])
+FAMILY_CONTEXT = _fam.get("family_context", "")
+
+# School email filters: keywords match anywhere in sender, subject, or body.
+SCHOOL_KEYWORDS = _fam.get("school_keywords", [])
+SCHOOL_DOMAINS = _fam.get("school_domains", [])
+SCHOOL_SENDERS = _fam.get("school_senders", [])
 
 # =========================================================================
 # Action-email scan (briefing pipeline) — non-school emails with deadlines
@@ -70,25 +70,17 @@ ACTION_KEYWORDS = [
 # =========================================================================
 # School calendar feeds (ICS) — events that never arrive by email
 # =========================================================================
-# Garrison Mill publishes all school calendars via a Sqids-encoded
-# subscription id; "bM" encodes [0] = all categories selected.
-# East Cobb Prep (Cadence) has no public feed — covered by email alerts.
 
-SCHOOL_ICS_URLS = [
-    "https://www.cobbk12.org/garrisonmill/_ci/calendar/subscription/bM",
-]
+SCHOOL_ICS_URLS = _fam.get("school_ics_urls", [])
 
 # =========================================================================
 # Telegram recipients
 # =========================================================================
 # TELEGRAM_CHAT_IDS (env) — broadcast list, used for alerts and system messages.
-# Optional per-person briefs: set TELEGRAM_CHAT_ID_TERRELL and/or
-# TELEGRAM_CHAT_ID_KIM (env) and each person gets a personalized daily brief.
+# Per-person briefs: family config maps person name -> env var holding their
+# chat id, e.g. {"people": {"Alex": "TELEGRAM_CHAT_ID_ALEX"}}.
 
-PEOPLE = {
-    "Terrell": "TELEGRAM_CHAT_ID_TERRELL",
-    "Kim": "TELEGRAM_CHAT_ID_KIM",
-}
+PEOPLE = _fam.get("people", {})
 
 # =========================================================================
 # Actions

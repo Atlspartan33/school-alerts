@@ -38,10 +38,10 @@ HELP_TEXT = """Family Chief of Staff — what I can do:
 
 Or just talk to me:
 • "what does Thursday look like?"
-• "add dentist for Tori Friday 2pm" (I'll preview before adding)
+• "add a dentist appointment Friday 2pm" (I'll preview before adding)
 • "remind us tomorrow night to put the trash out"
 • "done with the field trip form"
-• "remember that Tori's teacher prefers email before 3pm"
+• "remember that swim class needs a towel every Thursday"
 
 I check messages every ~5 minutes, so replies aren't instant.
 Anything that writes to the calendar or task board shows Approve/Cancel first."""

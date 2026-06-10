@@ -16,8 +16,8 @@ takes one tap.** Each level below builds on the last.
 ## Themes
 
 ### 1. Family-wide (the multiplier)
-The system is single-user until Kim is in it. Per-person briefs, alerts, and
-reminder routing are built — onboarding her is configuration, not code.
+The system is single-user until the second parent is in it. Per-person briefs, alerts, and
+reminder routing are built — onboarding them is configuration, not code.
 → Issues: [#4](../../issues/4), [#13](../../issues/13)
 
 ### 2. Richer senses

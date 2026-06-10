@@ -19,3 +19,6 @@ logs/
 # Claude Code local settings
 .claude/settings.local.json
 token.json.bak
+
+# Private family details (CI uses the FAMILY_CONFIG secret)
+family_config.json

@@ -1,6 +1,6 @@
 # Family Chief of Staff
 
-One system, three pipelines, for keeping the Massey household running:
+One system, three pipelines, for keeping the household running. Family details (names, schools, email filters) live in the `FAMILY_CONFIG` secret / a gitignored `family_config.json` — not in this repo:
 
 | Pipeline | Entry | Schedule | What it does |
 |----------|-------|----------|--------------|
@@ -19,7 +19,7 @@ flags "coverage gaps" and "owner unclear", never "X forgot".
 The pipelines share state (a GitHub gist): every school alert is remembered
 for 7 days with an open/done status; the brief escalates anything it has
 nudged twice. One-shot reminders ("remind us tomorrow night...") fire from
-the 5-minute inbox runs. Family memory ("remember that Tori's swim needs a
+the 5-minute inbox runs. Family memory ("remember that swim class needs a
 towel on Thursdays") feeds both the briefs and answers.
 
 ## Layout
@@ -66,7 +66,7 @@ Workflows: `check-emails.yml` (*/15), `daily-brief.yml` (daily),
 
 - `ANTHROPIC_API_KEY`
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_IDS`
-- Optional: `TELEGRAM_CHAT_ID_TERRELL`, `TELEGRAM_CHAT_ID_KIM` — set these to
+- Optional: per-person chat-id secrets named in the family config `people` map — set these to
   switch the daily brief to personalized per-person versions
 - `GMAIL_REFRESH_TOKEN`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`
   — the refresh token must carry `gmail.readonly`, `calendar.readonly`, and
@@ -81,11 +81,11 @@ Workflows: `check-emails.yml` (*/15), `daily-brief.yml` (daily),
 Add the school/district iCal URL(s) to `SCHOOL_ICS_URLS` in `config.py` to
 pull events that never arrive by email into the brief.
 
-## Adding Kim
+## Adding the second parent
 
-1. She opens the Telegram bot and sends it any message.
-2. Get her chat ID: `https://api.telegram.org/bot<TOKEN>/getUpdates`
-3. Set `TELEGRAM_CHAT_ID_KIM` (personalized brief) and/or append to
+1. They open the Telegram bot and send it any message.
+2. Get their chat ID: `https://api.telegram.org/bot<TOKEN>/getUpdates`
+3. Set their per-person chat-id secret (see `people` in the family config) and/or append to
    `TELEGRAM_CHAT_IDS` (alerts) in the repo secrets.
 
 ## Models
