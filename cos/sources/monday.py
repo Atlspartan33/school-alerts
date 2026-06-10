@@ -21,9 +21,11 @@ QUERY = """
 query ($boardIds: [ID!]) {
     boards(ids: $boardIds) {
         name
+        url
         columns { id title type }
         items_page(limit: 100) {
             items {
+                id
                 name
                 group { title }
                 column_values { id text type }
@@ -101,6 +103,7 @@ def fetch_monday_items() -> list[dict]:
     all_items = []
     for board in data.get("data", {}).get("boards", []):
         board_name = board.get("name", "")
+        board_url = board.get("url", "")
         roles = _map_columns(board.get("columns", []))
 
         for item in board.get("items_page", {}).get("items", []):
@@ -117,6 +120,8 @@ def fetch_monday_items() -> list[dict]:
                 "due_date": _col_text(cvs, roles.get("due_date")) or "No due date",
                 "board": board_name,
             }
+            if board_url and item.get("id"):
+                entry["url"] = f"{board_url}/pulses/{item['id']}"
             if status:
                 entry["status"] = status
             progress = _subitem_progress(item.get("subitems", []))

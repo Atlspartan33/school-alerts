@@ -174,7 +174,8 @@ URGENCY_LABELS = {
 }
 
 
-def format_telegram_message(result: dict, email_date: str = "") -> str:
+def format_telegram_message(result: dict, email_date: str = "",
+                            email_id: str = "") -> str:
     """Format the Claude result into a clean Telegram message (HTML)."""
     s = result["summary"]
     child = result.get("child", "")
@@ -213,6 +214,10 @@ def format_telegram_message(result: dict, email_date: str = "") -> str:
 
     source = s.get("source", "")
     footer_parts = [p for p in [source, date_note] if p]
+    if email_id:
+        footer_parts.append(
+            f'<a href="https://mail.google.com/mail/u/0/#all/{email_id}">Open email</a>'
+        )
     if footer_parts:
         lines.append("")
         lines.append(f"<i>{' · '.join(footer_parts)}</i>")
@@ -339,28 +344,41 @@ payment, give it one line under WATCH-OUTS. Same for overdue Finance-group tasks
 - If two things compete for the same evening, call the conflict.
 - Surface at most the 2-3 sharpest insights — quality over quantity.
 
-FORMAT (plain text only, no HTML/markdown):
+FORMAT — Telegram HTML (parse_mode=HTML). Allowed tags ONLY: <b>, <i>,
+<a href="...">, and ONE <blockquote expandable> at the end. Nothing else —
+no other tags, no markdown, no ━ divider lines.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-{mode_name} — {today_short}
-━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>{mode_name} · {today_short}</b>
 
-[Sections based on the mode instructions above]
+[Sections per the mode instructions. Each section header is an emoji +
+<b>Title</b> on its own line, e.g.:
+🗓 <b>Today</b> / 📅 <b>Tomorrow</b> / ✅ <b>Due</b> / 📧 <b>Emails</b>]
 
-WATCH-OUTS
+⚠️ <b>Watch-outs</b>
 [Cross-source insights: missed calendar entries, open school action items,
-conflicts. Skip this section entirely if there are none — never pad it.]
+money issues, conflicts. Bold the subject of each, e.g.
+<b>Life Time DocuSign unsigned</b> — Tori swims Thu 3:45.
+Skip this section entirely if there are none — never pad it.]
 
-BOTTOM LINE
-[2-3 direct, opinionated sentences. Tell them what to prioritize.
-Don't hedge. Don't say "consider" — say "do this."]
-━━━━━━━━━━━━━━━━━━━━━━━━━━
+→ <b>Bottom line:</b> [2-3 direct, opinionated sentences. Tell them what to
+prioritize. Don't hedge. Don't say "consider" — say "do this."]
 
-RULES:
-- Keep under 3500 characters total
-- Plain text ONLY — no HTML, no markdown, no bold/italic
-- Use short day names (Mon, Tue) and 12-hour time
-- For tasks: show priority, owner, and subtask progress when present. Skip vague items or bare URLs.
+<blockquote expandable>[THE LONG TAIL goes here so it collapses: the full
+task list, remaining calendar events, lower-priority emails. One compact
+line each. Skip this block entirely if everything already fit above.]</blockquote>
+
+HTML RULES (critical — broken markup means the message degrades to raw text):
+- Escape literal characters in content: & as &amp;  < as &lt;  > as &gt;
+- Every <b>, <i>, <a>, <blockquote expandable> must be properly closed
+- calendar_events with a "link" and monday_items with a "url": make the
+  title/name a link, e.g. <a href="URL">Sprayberry Animal Hospital</a>.
+  Never print bare URLs.
+- Keep the part BEFORE the blockquote under ~1200 characters — lead with
+  what matters; the blockquote holds the rest. Whole message under 3500.
+
+CONTENT RULES:
+- Use short day names (Mon, Tue) and 12-hour times like 7:00 AM
+- For tasks: show priority, owner, and subtask progress when present. Skip vague items.
 - For emails: only include ones with genuine deadlines or payments. Skip marketing.
 - Be opinionated. "Do X first" not "You might want to consider X"
 - If a data source is empty or failed, skip it — don't mention it"""
@@ -475,7 +493,7 @@ family_notes (facts the family taught you — ground truth), pending_reminders.
 Replies arrive with up to ~5 minutes of delay, so never promise real-time action.
 
 You can BOTH answer and act. Respond with ONLY JSON:
-{{"reply": "plain-text Telegram reply (concise, direct, no markdown)",
+{{"reply": "Telegram reply (concise, direct). Light HTML allowed: <b> for emphasis, <a href=\\"...\\"> for calendar/task links when the data provides one. No other tags, no markdown, never bare URLs. Escape literal & < > as &amp; &lt; &gt;",
   "actions": [
     {{"type": "create_task", "name": "...", "group": "Finance|House|Kids|Terrell To-Do", "due": "YYYY-MM-DD or null"}},
     {{"type": "create_event", "title": "...", "start": "YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD", "end": "... or null", "all_day": true/false, "location": null, "notes": null}},

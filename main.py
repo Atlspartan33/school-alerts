@@ -156,7 +156,7 @@ def run(dry_run: bool = False):
                 log.info("  -> Skipped (not important)")
                 processed.add(email["id"])
             else:
-                message = format_telegram_message(result, email.get("date", ""))
+                message = format_telegram_message(result, email.get("date", ""), email["id"])
                 log.info("  -> IMPORTANT — sending Telegram alert")
                 alert_id = remember_alert(state, result, email["id"])
                 has_cal = bool(result.get("summary", {}).get("calendar"))

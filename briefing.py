@@ -187,6 +187,13 @@ def run(dry_run: bool = False, mode: str | None = None):
     footer = _health_footer(statuses)
     sent = True
 
+    # One-tap Done buttons for the open watch-out items (top 3 by recency)
+    open_alerts = [a for a in recent_alerts if a.get("status") == "open" and a.get("id")]
+    buttons = [
+        [{"text": f"✅ Done: {a['headline'][:32]}", "callback_data": f"done:{a['id']}"}]
+        for a in open_alerts[-3:]
+    ] or None
+
     try:
         if people:
             for person, chat_id in people.items():
@@ -195,7 +202,8 @@ def run(dry_run: bool = False, mode: str | None = None):
                                        mode=mode, family_notes=family_notes,
                                        pending_reminders=pending_reminders)
                 log.info(f"Brief for {person} generated ({len(brief)} chars)")
-                if not delivery.send_to_chat(chat_id, brief + footer):
+                if not delivery.send_to_chat(chat_id, brief + footer,
+                                             parse_mode="HTML", buttons=buttons):
                     sent = False
         else:
             brief = generate_brief(calendar_events, monday_items, action_emails,
@@ -203,7 +211,7 @@ def run(dry_run: bool = False, mode: str | None = None):
                                    mode=mode, family_notes=family_notes,
                                    pending_reminders=pending_reminders)
             log.info(f"Brief generated ({len(brief)} chars)")
-            sent = delivery.send_telegram_plain(brief + footer)
+            sent = delivery.send_telegram(brief + footer, buttons=buttons)
     except Exception as e:
         log.error(f"Claude API failed: {e}")
         delivery.send_telegram_plain(f"⚠️ Family Brief: generation failed\n{e}")
