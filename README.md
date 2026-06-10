@@ -5,13 +5,22 @@ One system, three pipelines, for keeping the Massey household running:
 | Pipeline | Entry | Schedule | What it does |
 |----------|-------|----------|--------------|
 | **School alerts** | `main.py` | Every 15 min | Watches Gmail for school emails, classifies with Claude, sends Telegram alerts with action buttons (📅 Add to calendar · ➕ Make task · ✅ Done) |
-| **Daily brief** | `briefing.py` | Daily ~7 AM ET | Calendar + Monday.com board + action emails + school-alert memory → one opinionated brief. Per-person versions for Terrell and Kim when configured. Sunday = retro + week preview. |
-| **Telegram inbox** | `inbox.py` | Every 5 min | Handles button presses and replies: "done with the field trip form", "what's Thursday look like?", "add dentist to the calendar Fri 2pm", "remind me to pay the HOA" |
+| **Briefs** | `briefing.py` | 7 AM + 8 PM ET | Morning: full chief-of-staff brief (Sunday = retro + week preview). Evening: tomorrow-prep checklist — calendar, pack/sign/confirm items, coverage gaps. Per-person versions when configured. |
+| **Telegram inbox** | `inbox.py` | Every 5 min | Slash commands (`/today /tomorrow /week /due /unassigned /help`), natural-language requests, button presses, and reminder delivery |
+
+**Safety model:** questions and lookups are answered immediately; anything
+that *writes* (calendar event, Monday task, reminder) is **proposed first** —
+the bot shows a preview with ✅ Approve / ❌ Cancel buttons and only executes
+on approval. Marking things done and "remember that..." facts apply instantly.
+
+**Tone:** blunt about tasks and deadlines, neutral about people — the bot
+flags "coverage gaps" and "owner unclear", never "X forgot".
 
 The pipelines share state (a GitHub gist): every school alert is remembered
-for 7 days with an open/done status. The brief nudges open items and
-escalates anything it has already nudged twice; buttons and "done" replies
-clear them.
+for 7 days with an open/done status; the brief escalates anything it has
+nudged twice. One-shot reminders ("remind us tomorrow night...") fire from
+the 5-minute inbox runs. Family memory ("remember that Tori's swim needs a
+towel on Thursdays") feeds both the briefs and answers.
 
 ## Layout
 
@@ -40,10 +49,11 @@ cos/
 
 ```bash
 .venv\Scripts\activate
-python main.py --dry-run        # alerts pipeline, prints instead of sending
-python briefing.py --dry-run    # brief pipeline, prints instead of sending
-python inbox.py --dry-run       # inbox pipeline, prints replies
-python main.py --reauth         # browser login (Gmail + Calendar read/write)
+python main.py --dry-run                  # alerts pipeline, prints instead of sending
+python briefing.py --dry-run              # brief (mode auto-detected by ET hour)
+python briefing.py --dry-run --evening    # force tomorrow-prep mode
+python inbox.py --dry-run                 # inbox pipeline, prints replies
+python main.py --reauth                   # browser login (Gmail + Calendar read/write)
 ```
 
 `--dry-run` never sends Telegram messages and never saves state, so it can't

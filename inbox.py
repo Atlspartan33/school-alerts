@@ -31,7 +31,7 @@ log = logging.getLogger("family-cos")
 
 from cos import delivery
 from cos.google_auth import GoogleAuthError, get_calendar_service
-from cos.inbox import process_updates
+from cos.inbox import fire_due_reminders, process_updates
 from cos.runlog import record_run
 from cos.state import load_state, save_state
 
@@ -48,10 +48,11 @@ def run(dry_run: bool = False):
         log.warning(f"Calendar service unavailable: {e}")
 
     handled = process_updates(state, services)
+    fired = fire_due_reminders(state)
 
-    if handled:
-        log.info(f"Handled {handled} update(s)")
-        record_run("inbox", {"telegram": "ok"}, handled=handled)
+    if handled or fired:
+        log.info(f"Handled {handled} update(s), fired {fired} reminder(s)")
+        record_run("inbox", {"telegram": "ok"}, handled=handled, reminders_fired=fired)
     if not dry_run:
         save_state(state)
 

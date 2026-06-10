@@ -52,7 +52,8 @@ from cos.sources.gcal import fetch_upcoming_events
 from cos.sources.gmail_actions import fetch_action_emails
 from cos.sources.ics import fetch_school_events
 from cos.sources.monday import fetch_monday_items
-from cos.state import load_state, save_state, get_recent_alerts, record_nudges, pop_weekly_stats
+from cos.state import (load_state, save_state, get_recent_alerts, record_nudges,
+                       pop_weekly_stats, get_memories, get_reminders)
 
 
 SOURCE_LABELS = {
@@ -72,8 +73,15 @@ def _health_footer(statuses: dict) -> str:
     return f"\n⚠️ Sources unavailable this run: {', '.join(failed)}"
 
 
-def run(dry_run: bool = False):
-    log.info("Starting daily brief...")
+def _detect_mode() -> str:
+    """Morning brief before 4 PM ET, tomorrow-prep after (each cron lands in its window)."""
+    from cos.intelligence import now_local
+    return "evening" if now_local().hour >= 16 else "morning"
+
+
+def run(dry_run: bool = False, mode: str | None = None):
+    mode = mode or _detect_mode()
+    log.info(f"Starting {mode} brief...")
     delivery.DRY_RUN = dry_run
     statuses = {}
 
@@ -146,10 +154,15 @@ def run(dry_run: bool = False):
         statuses["alerts_memory"] = f"failed: {e}"
         log.error(f"State load failed: {e}")
 
-    # Sunday retro reads (and resets) the weekly counters
+    # Sunday retro reads (and resets) the weekly counters — morning brief only
     weekly_stats = {}
-    if state is not None and datetime.now(timezone.utc).strftime("%A") == "Sunday":
-        weekly_stats = pop_weekly_stats(state)
+    if state is not None and mode == "morning":
+        from cos.intelligence import now_local
+        if now_local().strftime("%A") == "Sunday":
+            weekly_stats = pop_weekly_stats(state)
+
+    family_notes = get_memories(state) if state is not None else []
+    pending_reminders = get_reminders(state) if state is not None else []
 
     if not any(v == "ok" for v in statuses.values()):
         log.error("Every source failed — not generating a brief.")
@@ -178,13 +191,17 @@ def run(dry_run: bool = False):
         if people:
             for person, chat_id in people.items():
                 brief = generate_brief(calendar_events, monday_items, action_emails,
-                                       recent_alerts, weekly_stats, person=person)
+                                       recent_alerts, weekly_stats, person=person,
+                                       mode=mode, family_notes=family_notes,
+                                       pending_reminders=pending_reminders)
                 log.info(f"Brief for {person} generated ({len(brief)} chars)")
                 if not delivery.send_to_chat(chat_id, brief + footer):
                     sent = False
         else:
             brief = generate_brief(calendar_events, monday_items, action_emails,
-                                   recent_alerts, weekly_stats)
+                                   recent_alerts, weekly_stats,
+                                   mode=mode, family_notes=family_notes,
+                                   pending_reminders=pending_reminders)
             log.info(f"Brief generated ({len(brief)} chars)")
             sent = delivery.send_telegram_plain(brief + footer)
     except Exception as e:
@@ -212,8 +229,13 @@ def run(dry_run: bool = False):
 
 
 if __name__ == "__main__":
+    cli_mode = None
+    if "--evening" in sys.argv:
+        cli_mode = "evening"
+    elif "--morning" in sys.argv:
+        cli_mode = "morning"
     try:
-        run(dry_run="--dry-run" in sys.argv)
+        run(dry_run="--dry-run" in sys.argv, mode=cli_mode)
     except Exception as e:
         log.error(f"Fatal error: {e}")
         sys.exit(1)
