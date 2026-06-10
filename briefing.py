@@ -1,12 +1,14 @@
 """
-Family Chief of Staff — daily brief pipeline.
+Family Chief of Staff — brief pipeline (morning + tomorrow-prep).
 
-Gathers Google Calendar, Monday.com, action emails, and this week's school
-alerts, then has Claude synthesize one opinionated brief and sends it to
-Telegram. Each source fails independently — a Monday outage never kills
-the calendar half of the brief, and failures are reported in the footer.
+Gathers Google Calendar, school ICS feeds, Monday.com, action emails, and
+this week's school alerts, then has Claude synthesize one opinionated brief
+and sends it to Telegram. Each source fails independently — a Monday outage
+never kills the calendar half of the brief, and failures are reported in
+the footer.
 
-Runs daily via GitHub Actions. Flags: --dry-run (print, don't send).
+Runs via GitHub Actions (7 AM + 8 PM ET).
+Flags: --dry-run (print, don't send), --morning / --evening (force mode).
 """
 
 import logging
@@ -42,11 +44,9 @@ else:
     )
 log = logging.getLogger("family-cos")
 
-from datetime import datetime, timezone
-
 from cos import delivery
 from cos.google_auth import GoogleAuthError, get_gmail_service, get_calendar_service
-from cos.intelligence import generate_brief
+from cos.intelligence import generate_brief, now_local
 from cos.runlog import record_run
 from cos.sources.gcal import fetch_upcoming_events
 from cos.sources.gmail_actions import fetch_action_emails
@@ -75,7 +75,6 @@ def _health_footer(statuses: dict) -> str:
 
 def _detect_mode() -> str:
     """Morning brief before 4 PM ET, tomorrow-prep after (each cron lands in its window)."""
-    from cos.intelligence import now_local
     return "evening" if now_local().hour >= 16 else "morning"
 
 
@@ -154,12 +153,17 @@ def run(dry_run: bool = False, mode: str | None = None):
         statuses["alerts_memory"] = f"failed: {e}"
         log.error(f"State load failed: {e}")
 
-    # Sunday retro reads (and resets) the weekly counters — morning brief only
+    # Sunday morning extras: weekly counters for the retro, plus one
+    # suggestion from the project's own backlog
     weekly_stats = {}
-    if state is not None and mode == "morning":
-        from cos.intelligence import now_local
-        if now_local().strftime("%A") == "Sunday":
-            weekly_stats = pop_weekly_stats(state)
+    backlog_suggestion = None
+    if state is not None and mode == "morning" and now_local().strftime("%A") == "Sunday":
+        weekly_stats = pop_weekly_stats(state)
+        try:
+            from cos.sources.backlog import fetch_backlog_suggestion
+            backlog_suggestion = fetch_backlog_suggestion()
+        except Exception as e:
+            log.warning(f"Backlog suggestion unavailable: {e}")
 
     family_notes = get_memories(state) if state is not None else []
     pending_reminders = get_reminders(state) if state is not None else []
@@ -200,7 +204,8 @@ def run(dry_run: bool = False, mode: str | None = None):
                 brief = generate_brief(calendar_events, monday_items, action_emails,
                                        recent_alerts, weekly_stats, person=person,
                                        mode=mode, family_notes=family_notes,
-                                       pending_reminders=pending_reminders)
+                                       pending_reminders=pending_reminders,
+                                       backlog_suggestion=backlog_suggestion)
                 log.info(f"Brief for {person} generated ({len(brief)} chars)")
                 if not delivery.send_to_chat(chat_id, brief + footer,
                                              parse_mode="HTML", buttons=buttons):
@@ -209,7 +214,8 @@ def run(dry_run: bool = False, mode: str | None = None):
             brief = generate_brief(calendar_events, monday_items, action_emails,
                                    recent_alerts, weekly_stats,
                                    mode=mode, family_notes=family_notes,
-                                   pending_reminders=pending_reminders)
+                                   pending_reminders=pending_reminders,
+                                   backlog_suggestion=backlog_suggestion)
             log.info(f"Brief generated ({len(brief)} chars)")
             sent = delivery.send_telegram(brief + footer, buttons=buttons)
     except Exception as e:
@@ -227,7 +233,7 @@ def run(dry_run: bool = False, mode: str | None = None):
     record_run("brief", statuses, sent=sent,
                counts={"calendar": len(calendar_events), "monday": len(monday_items),
                        "emails": len(action_emails), "school_alerts": len(recent_alerts)},
-               per_person=bool(people))
+               per_person=bool(people), mode=mode)
 
     if sent:
         log.info("Family Brief sent")

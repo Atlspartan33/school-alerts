@@ -17,12 +17,12 @@ from zoneinfo import ZoneInfo
 
 import config
 from cos import delivery
-from cos.intelligence import answer_question, parse_event_from_alert
+from cos.intelligence import answer_question, parse_event_from_alert, revise_proposal
 from cos.state import (
     add_memory, add_proposal, add_reminder, forget_memory, get_alert,
     get_memories, get_proposal, get_recent_alerts, get_reminders,
-    get_telegram_offset, mark_alert_done, pop_due_reminders, prune_proposals,
-    resolve_proposal, set_telegram_offset,
+    get_telegram_offset, mark_alert_done, pop_due_reminders, pop_pending_edit,
+    prune_proposals, resolve_proposal, set_pending_edit, set_telegram_offset,
 )
 
 log = logging.getLogger("family-cos")
@@ -68,6 +68,7 @@ def alert_buttons(alert_id: str, has_calendar_suggestion: bool) -> list[list[dic
 def _approve_buttons(pid: str) -> list[list[dict]]:
     return [[
         {"text": "✅ Approve", "callback_data": f"ok:{pid}"},
+        {"text": "✏️ Edit", "callback_data": f"ed:{pid}"},
         {"text": "❌ Cancel", "callback_data": f"no:{pid}"},
     ]]
 
@@ -137,10 +138,19 @@ def _handle_callback(cb: dict, state: dict, services: dict) -> None:
 
     try:
         # --- Proposal approval flow ---
-        if action in ("ok", "no"):
+        if action in ("ok", "no", "ed"):
             proposal = get_proposal(state, ref)
             if proposal is None or proposal.get("status") != "pending":
                 delivery.answer_callback(cb_id, "That proposal expired or was already handled.")
+                return
+            if action == "ed":
+                set_pending_edit(state, chat_id, ref)
+                delivery.answer_callback(cb_id)
+                delivery.send_to_chat(
+                    chat_id,
+                    "What should I change? (e.g. \"make it 3pm\", \"Saturday instead\", "
+                    "\"assign it to the House group\")",
+                )
                 return
             if action == "no":
                 resolve_proposal(state, ref, "cancelled")
@@ -193,6 +203,34 @@ def _handle_callback(cb: dict, state: dict, services: dict) -> None:
         delivery.send_to_chat(chat_id, f"⚠️ That didn't work: {e}")
 
 
+def _apply_edit(state: dict, chat_id: str, pid: str, instruction: str):
+    """Revise a pending proposal with the user's instruction and re-preview it."""
+    proposal = get_proposal(state, pid)
+    if proposal is None or proposal.get("status") != "pending":
+        delivery.send_to_chat(chat_id, "That proposal expired — start over with a fresh request.")
+        return
+    if instruction.strip().lower() in ("cancel", "nevermind", "never mind", "forget it"):
+        resolve_proposal(state, pid, "cancelled")
+        delivery.send_to_chat(chat_id, f"❌ Cancelled: {_describe(proposal['type'], proposal['payload'])}")
+        return
+
+    revised = revise_proposal(proposal["type"], proposal["payload"], instruction)
+    if revised is None:
+        set_pending_edit(state, chat_id, pid)  # keep waiting for a usable instruction
+        delivery.send_to_chat(
+            chat_id,
+            "Couldn't apply that to this action — try rephrasing (or say \"cancel\").",
+        )
+        return
+
+    proposal["payload"] = revised
+    delivery.send_to_chat(
+        chat_id,
+        f"Revised:\n{_describe(proposal['type'], revised)}",
+        buttons=_approve_buttons(pid),
+    )
+
+
 def _task_payload_from_alert(alert: dict) -> dict:
     name = alert.get("headline") or "School follow-up"
     child = alert.get("child", "")
@@ -217,6 +255,13 @@ def _handle_message(msg: dict, state: dict, services: dict) -> None:
         return
     if not text:
         return
+
+    # --- Pending edit: this message is the edit instruction ---
+    if not text.startswith("/"):
+        pending_pid = pop_pending_edit(state, chat_id)
+        if pending_pid:
+            _apply_edit(state, chat_id, pending_pid, text)
+            return
 
     # --- Slash commands ---
     if text.startswith("/"):
@@ -274,6 +319,8 @@ def _handle_message(msg: dict, state: dict, services: dict) -> None:
     if confirmations:
         reply = (reply + "\n\n" + "\n".join(confirmations)).strip()
     if reply:
+        # Telegram HTML has no <br>; the model occasionally emits one anyway
+        reply = reply.replace("<br>", "\n").replace("<br/>", "\n").replace("<br />", "\n")
         delivery.send_to_chat(chat_id, reply, parse_mode="HTML")
 
     for kind, payload in proposals:
