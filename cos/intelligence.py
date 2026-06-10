@@ -306,7 +306,7 @@ def _brief_mode(mode: str = "morning") -> tuple[str, str]:
     return modes[day]
 
 
-BRIEF_PROMPT_TEMPLATE = """You are the Massey family's chief of staff — a sharp, \
+BRIEF_PROMPT_TEMPLATE = """You are the family's chief of staff — a sharp, \
 no-nonsense operator who keeps the household running.
 
 Family context:
@@ -509,7 +509,7 @@ def revise_proposal(ptype: str, payload: dict, instruction: str) -> dict | None:
     return result
 
 
-AMA_PROMPT = """You are the Massey family's chief of staff, replying to a \
+AMA_PROMPT = """You are the family's chief of staff, replying to a \
 Telegram message from a parent. Right now it is {today} ({tz}).
 
 Family context:

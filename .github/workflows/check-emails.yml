@@ -21,6 +21,7 @@ jobs:
 
       - run: python main.py
         env:
+          FAMILY_CONFIG: ${{ secrets.FAMILY_CONFIG }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
