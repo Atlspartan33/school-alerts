@@ -218,6 +218,16 @@ def prune_proposals(state: dict, max_age_hours: int = 48):
     ]
 
 
+# --- Pending edits (Edit button pressed; next message is the instruction) ---
+
+def set_pending_edit(state: dict, chat_id: str, proposal_id: str):
+    state.setdefault("pending_edits", {})[chat_id] = proposal_id
+
+
+def pop_pending_edit(state: dict, chat_id: str) -> str | None:
+    return state.setdefault("pending_edits", {}).pop(chat_id, None)
+
+
 # --- Reminders (one-shot, fired by the inbox runs) ---
 
 def add_reminder(state: dict, text: str, when_iso: str, chat_id: str) -> str:

@@ -329,6 +329,10 @@ mentioned it.
 5. weekly_stats — counters for the Sunday retro (may be empty)
 6. family_notes — facts the family taught the bot (treat as ground truth)
 7. pending_reminders — one-shot reminders already scheduled (don't re-suggest them)
+8. backlog_suggestion — at most one improvement to the assistant itself
+   (Sunday only). If present, add ONE line at the very end of the message:
+   💡 <b>Worth building next:</b> [title] (#[number]) — [one short clause on
+   why it helps]. Never more than one; skip the line entirely if absent.
 
 {tone_rules}
 
@@ -394,6 +398,7 @@ def generate_brief(
     mode: str = "morning",
     family_notes: list[dict] | None = None,
     pending_reminders: list[dict] | None = None,
+    backlog_suggestion: dict | None = None,
 ) -> str:
     """Generate the chief-of-staff brief (morning or evening prep), optionally personalized."""
     now = now_local()
@@ -435,6 +440,7 @@ def generate_brief(
         "pending_reminders": [
             {"text": r["text"], "when": r["when"]} for r in (pending_reminders or [])
         ],
+        "backlog_suggestion": backlog_suggestion,
     }, indent=2, default=str)
 
     return _call_claude(config.BRIEF_MODEL, 2000, prompt, user_message)
@@ -479,6 +485,30 @@ def parse_event_from_alert(alert: dict) -> dict | None:
     return result
 
 
+def revise_proposal(ptype: str, payload: dict, instruction: str) -> dict | None:
+    """Apply a free-text edit instruction to a pending proposal payload."""
+    shapes = {
+        "create_event": '{"title": "...", "start": "YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD", '
+                        '"end": "... or null", "all_day": true/false, "location": null, "notes": null}',
+        "create_task": '{"name": "...", "group": "Finance|House|Kids|Terrell To-Do", "due": "YYYY-MM-DD or null"}',
+        "create_reminder": '{"text": "...", "when": "YYYY-MM-DDTHH:MM:SS (local time)"}',
+    }
+    prompt = (
+        f"Today is {now_local().strftime('%A, %B %d, %Y')}. Timezone: {config.TIMEZONE}.\n"
+        f"A parent is editing a pending {ptype} action. Apply their instruction to the "
+        f"payload and respond with ONLY the complete revised JSON in this shape:\n"
+        f"{shapes.get(ptype, '{}')}\n"
+        "Keep every field they didn't ask to change. If the instruction makes no sense "
+        'for this action, respond with {"error": "brief reason"}.'
+    )
+    user_message = json.dumps({"current": payload, "instruction": instruction}, default=str)
+    text = _call_claude(config.CLASSIFIER_MODEL, 300, prompt, user_message)
+    result = _json_from_text(text)
+    if not result or result.get("error"):
+        return None
+    return result
+
+
 AMA_PROMPT = """You are the Massey family's chief of staff, replying to a \
 Telegram message from a parent. Right now it is {today} ({tz}).
 
@@ -493,7 +523,7 @@ family_notes (facts the family taught you — ground truth), pending_reminders.
 Replies arrive with up to ~5 minutes of delay, so never promise real-time action.
 
 You can BOTH answer and act. Respond with ONLY JSON:
-{{"reply": "Telegram reply (concise, direct). Light HTML allowed: <b> for emphasis, <a href=\\"...\\"> for calendar/task links when the data provides one. No other tags, no markdown, never bare URLs. Escape literal & < > as &amp; &lt; &gt;",
+{{"reply": "Telegram reply (concise, direct). Light HTML allowed: <b> for emphasis, <a href=\\"...\\"> for calendar/task links when the data provides one. NO other tags — especially no <br>; use real newline characters for line breaks. No markdown, never bare URLs. Escape literal & < > as &amp; &lt; &gt;",
   "actions": [
     {{"type": "create_task", "name": "...", "group": "Finance|House|Kids|Terrell To-Do", "due": "YYYY-MM-DD or null"}},
     {{"type": "create_event", "title": "...", "start": "YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD", "end": "... or null", "all_day": true/false, "location": null, "notes": null}},
