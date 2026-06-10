@@ -274,7 +274,7 @@ def _handle_message(msg: dict, state: dict, services: dict) -> None:
     if confirmations:
         reply = (reply + "\n\n" + "\n".join(confirmations)).strip()
     if reply:
-        delivery.send_to_chat(chat_id, reply)
+        delivery.send_to_chat(chat_id, reply, parse_mode="HTML")
 
     for kind, payload in proposals:
         _propose(state, chat_id, kind, payload)

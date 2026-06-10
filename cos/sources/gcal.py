@@ -44,6 +44,7 @@ def fetch_upcoming_events(calendar_service, days_ahead: int | None = None) -> li
                 "location": event.get("location", ""),
                 "all_day": all_day,
                 "calendar": event.get("organizer", {}).get("displayName", ""),
+                "link": event.get("htmlLink", ""),
             })
 
     all_events.sort(key=lambda e: e["start"])
