@@ -19,10 +19,11 @@ import config
 from cos import delivery
 from cos.intelligence import answer_question, parse_event_from_alert, revise_proposal
 from cos.state import (
-    add_memory, add_proposal, add_reminder, forget_memory, get_alert,
-    get_memories, get_proposal, get_recent_alerts, get_reminders,
-    get_telegram_offset, mark_alert_done, pop_due_reminders, pop_pending_edit,
-    prune_proposals, resolve_proposal, set_pending_edit, set_telegram_offset,
+    add_memory, add_person_chat, add_proposal, add_reminder, expect_guest,
+    forget_memory, get_alert, get_memories, get_proposal, get_recent_alerts,
+    get_reminders, get_telegram_offset, mark_alert_done, pop_due_reminders,
+    pop_expected_guest, pop_pending_edit, prune_proposals, resolve_proposal,
+    set_pending_edit, set_telegram_offset,
 )
 
 log = logging.getLogger("family-cos")
@@ -129,7 +130,7 @@ def _handle_callback(cb: dict, state: dict, services: dict) -> None:
     chat_id = str(cb.get("message", {}).get("chat", {}).get("id", ""))
     cb_id = cb.get("id", "")
 
-    if chat_id not in delivery.known_chat_ids():
+    if chat_id not in delivery.known_chat_ids(state):
         log.warning(f"Ignoring callback from unknown chat {chat_id}")
         delivery.answer_callback(cb_id)
         return
@@ -245,13 +246,49 @@ def _task_payload_from_alert(alert: dict) -> dict:
     return {"name": name, "group": config.DEFAULT_TASK_GROUP, "due": due}
 
 
+def _welcome_guest(name: str, chat_id: str, state: dict, services: dict):
+    """First-contact moment: greet by name and immediately show tomorrow."""
+    delivery.send_to_chat(
+        chat_id,
+        f"Hi {name} 👋 I'm the family's chief of staff. I watch the school "
+        "emails, the family calendar, and the to-do board so things don't "
+        "slip through the cracks.\n\nHere's what I see coming up:",
+    )
+    # Live mini-brief — the wow is real data, zero effort
+    _handle_message(
+        {"chat": {"id": chat_id},
+         "text": "Give a warm, scannable preview of tomorrow and the next few days: "
+                 "calendar, anything due, anything the kids need. Keep it short."},
+        state, services,
+    )
+    delivery.send_to_chat(
+        chat_id,
+        "You can just talk to me, any time:\n"
+        "• \"what does Thursday look like?\"\n"
+        "• \"add date night Friday 7pm to the calendar\"\n"
+        "• \"remind us tomorrow night to pack the swim bag\"\n"
+        "• \"put 'buy birthday gift' on the family list\"\n\n"
+        "Anything I add, you approve with one tap first — I never change "
+        "anything on my own. Try /help for the full list. Replies take a few "
+        "minutes (I check messages every 5).",
+    )
+    # Tell the rest of the family
+    delivery.send_telegram_plain(f"✅ {name} is onboarded — their briefs start tomorrow morning.")
+
+
 def _handle_message(msg: dict, state: dict, services: dict) -> None:
     """Handle one text message: slash command, done-reply, question, or request."""
     chat_id = str(msg.get("chat", {}).get("id", ""))
     text = (msg.get("text") or "").strip()
 
-    if chat_id not in delivery.known_chat_ids():
-        log.warning(f"Ignoring message from unknown chat {chat_id}")
+    if chat_id not in delivery.known_chat_ids(state):
+        guest_name = pop_expected_guest(state)
+        if guest_name:
+            add_person_chat(state, guest_name, chat_id)
+            log.info(f"Onboarded {guest_name} at chat {chat_id}")
+            _welcome_guest(guest_name, chat_id, state, services)
+        else:
+            log.warning(f"Ignoring message from unknown chat {chat_id}")
         return
     if not text:
         return
@@ -311,6 +348,8 @@ def _handle_message(msg: dict, state: dict, services: dict) -> None:
             elif kind == "forget":
                 if forget_memory(state, action.get("memory_id", "")):
                     confirmations.append("Forgotten.")
+            elif kind == "expect_guest":
+                expect_guest(state, action.get("name", "").strip() or "Guest")
         except Exception as e:
             log.error(f"AMA action {action} failed: {e}")
             confirmations.append(f"⚠️ Couldn't complete that: {e}")

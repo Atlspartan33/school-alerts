@@ -160,7 +160,12 @@ def run(dry_run: bool = False):
                 log.info("  -> IMPORTANT — sending Telegram alert")
                 alert_id = remember_alert(state, result, email["id"])
                 has_cal = bool(result.get("summary", {}).get("calendar"))
-                sent = delivery.send_telegram(message, buttons=alert_buttons(alert_id, has_cal))
+                extra_recipients = [
+                    cid for name, cid in state.get("people_chats", {}).items()
+                    if state.get("people_settings", {}).get(name, {}).get("alerts", True)
+                ]
+                sent = delivery.send_telegram(message, buttons=alert_buttons(alert_id, has_cal),
+                                              extra_chat_ids=extra_recipients)
                 if sent:
                     alerts_sent += 1
                     if clean_subj:
