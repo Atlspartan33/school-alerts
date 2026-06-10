@@ -70,10 +70,13 @@ ACTION_KEYWORDS = [
 # =========================================================================
 # School calendar feeds (ICS) — events that never arrive by email
 # =========================================================================
-# Add iCal/ICS URLs here (e.g. the Cobb County district calendar feed or a
-# Google Calendar "secret address in iCal format"). Empty list = source off.
+# Garrison Mill publishes all school calendars via a Sqids-encoded
+# subscription id; "bM" encodes [0] = all categories selected.
+# East Cobb Prep (Cadence) has no public feed — covered by email alerts.
 
-SCHOOL_ICS_URLS = []
+SCHOOL_ICS_URLS = [
+    "https://www.cobbk12.org/garrisonmill/_ci/calendar/subscription/bM",
+]
 
 # =========================================================================
 # Telegram recipients
